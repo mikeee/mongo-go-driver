@@ -19,21 +19,20 @@ import (
 	"strings"
 
 	"github.com/mongodb/mongo-go-driver/bson"
-	"github.com/mongodb/mongo-go-driver/core/command"
-	"github.com/mongodb/mongo-go-driver/core/connection"
-	"github.com/mongodb/mongo-go-driver/core/connstring"
-	"github.com/mongodb/mongo-go-driver/core/description"
-	"github.com/mongodb/mongo-go-driver/core/event"
-	"github.com/mongodb/mongo-go-driver/core/readconcern"
-	"github.com/mongodb/mongo-go-driver/core/readpref"
-	"github.com/mongodb/mongo-go-driver/core/session"
-	"github.com/mongodb/mongo-go-driver/core/topology"
-	"github.com/mongodb/mongo-go-driver/core/uuid"
-	"github.com/mongodb/mongo-go-driver/core/writeconcern"
+	"github.com/mongodb/mongo-go-driver/event"
 	"github.com/mongodb/mongo-go-driver/internal/testutil"
 	"github.com/mongodb/mongo-go-driver/internal/testutil/helpers"
-	"github.com/mongodb/mongo-go-driver/mongo/collectionopt"
-	"github.com/mongodb/mongo-go-driver/mongo/findopt"
+	"github.com/mongodb/mongo-go-driver/mongo/options"
+	"github.com/mongodb/mongo-go-driver/mongo/readconcern"
+	"github.com/mongodb/mongo-go-driver/mongo/readpref"
+	"github.com/mongodb/mongo-go-driver/mongo/writeconcern"
+	"github.com/mongodb/mongo-go-driver/x/bsonx"
+	"github.com/mongodb/mongo-go-driver/x/mongo/driver/session"
+	"github.com/mongodb/mongo-go-driver/x/mongo/driver/topology"
+	"github.com/mongodb/mongo-go-driver/x/network/command"
+	"github.com/mongodb/mongo-go-driver/x/network/connection"
+	"github.com/mongodb/mongo-go-driver/x/network/connstring"
+	"github.com/mongodb/mongo-go-driver/x/network/description"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,38 +57,25 @@ type CollFunction struct {
 }
 
 var ctx = context.Background()
-var emptyDoc = bson.NewDocument()
-var updateDoc = bson.NewDocument(
-	bson.EC.SubDocument("$inc", bson.NewDocument(
-		bson.EC.Int32("x", 1),
-	)),
-)
-var doc = bson.NewDocument(
-	bson.EC.Int32("x", 1),
-)
-var doc2 = bson.NewDocument(
-	bson.EC.Int32("y", 1),
-)
+var emptyDoc = bsonx.Doc{}
+var emptyArr = bsonx.Arr{}
+var updateDoc = bsonx.Doc{{"$inc", bsonx.Document(bsonx.Doc{{"x", bsonx.Int32(1)}})}}
+var doc = bsonx.Doc{{"x", bsonx.Int32(1)}}
+var doc2 = bsonx.Doc{{"y", bsonx.Int32(1)}}
 
 var fooIndex = IndexModel{
-	Keys: bson.NewDocument(
-		bson.EC.Int32("foo", -1),
-	),
-	Options: NewIndexOptionsBuilder().Name("fooIndex").Build(),
+	Keys:    bsonx.Doc{{"foo", bsonx.Int32(-1)}},
+	Options: options.Index().SetName("fooIndex"),
 }
 
 var barIndex = IndexModel{
-	Keys: bson.NewDocument(
-		bson.EC.Int32("bar", -1),
-	),
-	Options: NewIndexOptionsBuilder().Name("barIndex").Build(),
+	Keys:    bsonx.Doc{{"bar", bsonx.Int32(-1)}},
+	Options: options.Index().SetName("barIndex"),
 }
 
 var bazIndex = IndexModel{
-	Keys: bson.NewDocument(
-		bson.EC.Int32("baz", -1),
-	),
-	Options: NewIndexOptionsBuilder().Name("bazIndex").Build(),
+	Keys:    bsonx.Doc{{"baz", bsonx.Int32(-1)}},
+	Options: options.Index().SetName("bazIndex"),
 }
 
 func createFuncMap(t *testing.T, dbName string, collName string, monitored bool) (*Client, *Database, *Collection, []CollFunction) {
@@ -118,7 +104,7 @@ func createFuncMap(t *testing.T, dbName string, collName string, monitored bool)
 		{"UpdateOne", coll, nil, func(mctx SessionContext) error { _, err := coll.UpdateOne(mctx, emptyDoc, updateDoc); return err }},
 		{"UpdateMany", coll, nil, func(mctx SessionContext) error { _, err := coll.UpdateMany(mctx, emptyDoc, updateDoc); return err }},
 		{"ReplaceOne", coll, nil, func(mctx SessionContext) error { _, err := coll.ReplaceOne(mctx, emptyDoc, emptyDoc); return err }},
-		{"Aggregate", coll, nil, func(mctx SessionContext) error { _, err := coll.Aggregate(mctx, emptyDoc); return err }},
+		{"Aggregate", coll, nil, func(mctx SessionContext) error { _, err := coll.Aggregate(mctx, emptyArr); return err }},
 		{"Count", coll, nil, func(mctx SessionContext) error { _, err := coll.Count(mctx, emptyDoc); return err }},
 		{"Distinct", coll, nil, func(mctx SessionContext) error { _, err := coll.Distinct(mctx, "field", emptyDoc); return err }},
 		{"Find", coll, nil, func(mctx SessionContext) error { _, err := coll.Find(mctx, emptyDoc); return err }},
@@ -146,7 +132,7 @@ func createFuncMap(t *testing.T, dbName string, collName string, monitored bool)
 	return client, db, coll, functions
 }
 
-func getClusterTime(clusterTime *bson.Document) (uint32, uint32) {
+func getClusterTime(clusterTime bsonx.Doc) (uint32, uint32) {
 	if clusterTime == nil {
 		fmt.Println("is nil")
 		return 0, 0
@@ -158,7 +144,7 @@ func getClusterTime(clusterTime *bson.Document) (uint32, uint32) {
 		return 0, 0
 	}
 
-	timestampVal, err := clusterTimeVal.MutableDocument().LookupErr("clusterTime")
+	timestampVal, err := clusterTimeVal.Document().LookupErr("clusterTime")
 	if err != nil {
 		fmt.Println("could not find clusterTime")
 		return 0, 0
@@ -226,7 +212,7 @@ func createMonitoredTopology(t *testing.T, clock *session.ClusterClock, monitor 
 
 	_, err = (&command.Write{
 		DB:      testutil.DBName(t),
-		Command: bson.NewDocument(bson.EC.Int32("dropDatabase", 1)),
+		Command: bsonx.Doc{{"dropDatabase", bsonx.Int32(1)}},
 	}).RoundTrip(context.Background(), s.SelectedDescription(), c)
 	if err != nil {
 		t.Fatal(err)
@@ -244,6 +230,7 @@ func createSessionsMonitoredClient(t *testing.T, monitor *event.CommandMonitor) 
 		readPreference: readpref.Primary(),
 		readConcern:    readconcern.Local(),
 		clock:          clock,
+		registry:       bson.DefaultRegistry,
 	}
 
 	subscription, err := c.topology.Subscribe()
@@ -253,7 +240,7 @@ func createSessionsMonitoredClient(t *testing.T, monitor *event.CommandMonitor) 
 	return c
 }
 
-func sessionIDsEqual(t *testing.T, sessionID1 *bson.Document, sessionID2 *bson.Document) bool {
+func sessionIDsEqual(t *testing.T, sessionID1 bsonx.Doc, sessionID2 bsonx.Doc) bool {
 	firstID, err := sessionID1.LookupErr("id")
 	testhelpers.RequireNil(t, err, "error extracting ID 1: %s", err)
 
@@ -284,17 +271,17 @@ func getReturnError(returnVals []reflect.Value) error {
 	switch converted := errVal.Interface().(type) {
 	case error:
 		return converted
-	case *DocumentResult:
+	case *SingleResult:
 		return converted.err
 	default:
 		return nil
 	}
 }
 
-func getSessionUUID(t *testing.T, cmd *bson.Document) []byte {
+func getSessionUUID(t *testing.T, cmd bson.Raw) []byte {
 	lsid, err := cmd.LookupErr("lsid")
 	testhelpers.RequireNil(t, err, "key lsid not found in command")
-	sessID, err := lsid.MutableDocument().LookupErr("id")
+	sessID, err := lsid.Document().LookupErr("id")
 	testhelpers.RequireNil(t, err, "key id not found in lsid doc")
 
 	_, data := sessID.Binary()
@@ -325,16 +312,6 @@ func checkLsidIncluded(t *testing.T, shouldInclude bool) {
 	}
 }
 
-func checkUnbundle(t *testing.T, s1 *session.Client, s2 *sessionImpl, cid uuid.UUID, err error) {
-	testhelpers.RequireNil(t, err, "Unexpected error unbundling: %s", err)
-	if s1.ClientID != cid {
-		t.Fatalf("expected client ID: %s, received client ID: %s", s1.ClientID, cid)
-	}
-	if s1.SessionID != s2.SessionID {
-		t.Fatalf("expected session ID: %s, received session ID: %s", s1.SessionID, s2.SessionID)
-	}
-}
-
 func drainHelper(c Cursor) {
 	for c.Next(ctx) {
 	}
@@ -354,6 +331,8 @@ func testCheckedOut(t *testing.T, client *Client, expected int) {
 }
 
 func TestSessions(t *testing.T) {
+	skipIfBelow36(t)
+
 	t.Run("TestPoolLifo", func(t *testing.T) {
 		skipIfBelow36(t) // otherwise no session timeout is given and sessions auto expire
 
@@ -400,7 +379,7 @@ func TestSessions(t *testing.T) {
 		testhelpers.RequireNil(t, err, "error dropping database: %s", err)
 
 		coll := db.Collection("SessionsTestClusterTimeColl")
-		serverStatusDoc := bson.NewDocument(bson.EC.Int32("serverStatus", 1))
+		serverStatusDoc := bsonx.Doc{{"serverStatus", bsonx.Int32(1)}}
 
 		functions := []struct {
 			name    string
@@ -410,7 +389,7 @@ func TestSessions(t *testing.T) {
 		}{
 			{"ServerStatus", reflect.ValueOf(db.RunCommand), []interface{}{ctx, serverStatusDoc}, []interface{}{ctx, serverStatusDoc}},
 			{"InsertOne", reflect.ValueOf(coll.InsertOne), []interface{}{ctx, doc}, []interface{}{ctx, doc2}},
-			{"Aggregate", reflect.ValueOf(coll.Aggregate), []interface{}{ctx, emptyDoc}, []interface{}{ctx, emptyDoc}},
+			{"Aggregate", reflect.ValueOf(coll.Aggregate), []interface{}{ctx, emptyArr}, []interface{}{ctx, emptyArr}},
 			{"Find", reflect.ValueOf(coll.Find), []interface{}{ctx, emptyDoc}, []interface{}{ctx, emptyDoc}},
 		}
 
@@ -446,8 +425,16 @@ func TestSessions(t *testing.T) {
 				nextCtVal, err := sessionStarted.Command.LookupErr("$clusterTime")
 				testhelpers.RequireNil(t, err, "key $clusterTime not found in first command for %s", tc.name)
 
-				epoch1, ord1 := getClusterTime(bson.NewDocument(bson.EC.SubDocument("$clusterTime", replyCtVal.MutableDocument())))
-				epoch2, ord2 := getClusterTime(bson.NewDocument(bson.EC.SubDocument("$clusterTime", nextCtVal.MutableDocument())))
+				replyCt, err := bsonx.ReadDoc(replyCtVal.Document())
+				if err != nil {
+					t.Fatalf("could not read document: %v", err)
+				}
+				nextCt, err := bsonx.ReadDoc(nextCtVal.Document())
+				if err != nil {
+					t.Fatalf("could not read document: %v", err)
+				}
+				epoch1, ord1 := getClusterTime(bsonx.Doc{{"$clusterTime", bsonx.Document(replyCt)}})
+				epoch2, ord2 := getClusterTime(bsonx.Doc{{"$clusterTime", bsonx.Document(nextCt)}})
 
 				if epoch1 == 0 {
 					t.Fatal("epoch1 is 0")
@@ -496,12 +483,12 @@ func TestSessions(t *testing.T) {
 				// can't insert same document again
 				if tc.name == "InsertOne" {
 					tc.f = func(mctx SessionContext) error {
-						_, err := tc.coll.InsertOne(mctx, bson.NewDocument(bson.EC.Int32("InsertOneNewDoc", 1)))
+						_, err := tc.coll.InsertOne(mctx, bsonx.Doc{{"InsertOneNewDoc", bsonx.Int32(1)}})
 						return err
 					}
 				} else if tc.name == "InsertMany" {
 					tc.f = func(mctx SessionContext) error {
-						_, err := tc.coll.InsertMany(mctx, []interface{}{bson.NewDocument(bson.EC.Int32("InsertManyNewDoc", 2))})
+						_, err := tc.coll.InsertMany(mctx, []interface{}{bsonx.Doc{{"InsertManyNewDoc", bsonx.Int32(2)}}})
 						return err
 					}
 				} else if tc.name == "DropOneIndex" {
@@ -585,9 +572,9 @@ func TestSessions(t *testing.T) {
 		testhelpers.RequireNil(t, err, "error dropping database: %s", err)
 		coll := db.Collection("ImplicitSessionReturnedColl")
 
-		_, err = coll.InsertOne(ctx, bson.NewDocument(bson.EC.Int32("x", 1)))
+		_, err = coll.InsertOne(ctx, bsonx.Doc{{"x", bsonx.Int32(1)}})
 		testhelpers.RequireNil(t, err, "error running insert: %s", err)
-		_, err = coll.InsertOne(ctx, bson.NewDocument(bson.EC.Int32("y", 2)))
+		_, err = coll.InsertOne(ctx, bsonx.Doc{{"y", bsonx.Int32(2)}})
 		testhelpers.RequireNil(t, err, "error running insert: %s", err)
 
 		cur, err := coll.Find(ctx, emptyDoc) // should use implicit session returned by InsertOne commands
@@ -626,16 +613,16 @@ func TestSessions(t *testing.T) {
 		coll := db.Collection("ImplicitSessionReturnedGMColl")
 
 		docs := []interface{}{
-			bson.NewDocument(bson.EC.Int32("a", 1)),
-			bson.NewDocument(bson.EC.Int32("a", 2)),
-			bson.NewDocument(bson.EC.Int32("a", 3)),
-			bson.NewDocument(bson.EC.Int32("a", 4)),
-			bson.NewDocument(bson.EC.Int32("a", 5)),
+			bsonx.Doc{{"a", bsonx.Int32(1)}},
+			bsonx.Doc{{"a", bsonx.Int32(2)}},
+			bsonx.Doc{{"a", bsonx.Int32(3)}},
+			bsonx.Doc{{"a", bsonx.Int32(4)}},
+			bsonx.Doc{{"a", bsonx.Int32(5)}},
 		}
 		_, err = coll.InsertMany(ctx, docs) // pool should have 1 session
 		require.Nil(t, err, "Error on insert")
 
-		cur, err := coll.Find(ctx, emptyDoc, findopt.BatchSize(3))
+		cur, err := coll.Find(ctx, emptyDoc, options.Find().SetBatchSize(3))
 		require.Nil(t, err, "Error on find")
 
 		testCheckedOut(t, client, 1)
@@ -661,12 +648,12 @@ func TestSessions(t *testing.T) {
 		wcMajority := writeconcern.New(writeconcern.WMajority())
 		client := createSessionsMonitoredClient(t, sessionsMonitor)
 		db := client.Database("TestFindAndGetMoreSessionIDsDB")
-		coll := db.Collection("TestFindAndGetMoreSessionIDsColl", collectionopt.WriteConcern(wcMajority),
-			collectionopt.ReadConcern(readconcern.Majority()))
+		coll := db.Collection("TestFindAndGetMoreSessionIDsColl",
+			options.Collection().SetWriteConcern(wcMajority).SetReadConcern(readconcern.Majority()))
 		docs := []interface{}{
-			bson.NewDocument(bson.EC.Int32("a", 1)),
-			bson.NewDocument(bson.EC.Int32("a", 2)),
-			bson.NewDocument(bson.EC.Int32("a", 3)),
+			bsonx.Doc{{"a", bsonx.Int32(1)}},
+			bsonx.Doc{{"a", bsonx.Int32(2)}},
+			bsonx.Doc{{"a", bsonx.Int32(3)}},
 		}
 
 		for i, doc := range docs {
@@ -693,7 +680,7 @@ func TestSessions(t *testing.T) {
 				}
 
 				coll.readPreference = tc.rp
-				cur, err := coll.Find(ctx, emptyDoc, findopt.BatchSize(2))
+				cur, err := coll.Find(ctx, emptyDoc, options.Find().SetBatchSize(2))
 				testhelpers.RequireNil(t, err, "error running find: %s", err)
 
 				testhelpers.RequireNotNil(t, sessionStarted, "no started command registered for find")
@@ -719,92 +706,4 @@ func TestSessions(t *testing.T) {
 			})
 		}
 	})
-
-	//t.Run("TestSessionUnbundling", func(t *testing.T) {
-	//	client := createTestClient(t)
-	//	sess1, err := client.StartSession()
-	//	sess2, err := client.StartSession()
-	//	testhelpers.RequireNil(t, err, "Unexpected error starting session: %s", err)
-	//
-	//	t.Run("TestAggregateOpt", func(t *testing.T) {
-	//		_, s, err := aggregateopt.BundleAggregate(sess1, aggregateopt.BundleAggregate(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestChangeStreamOpt", func(t *testing.T) {
-	//		_, s, err := changestreamopt.BundleChangeStream(sess1, changestreamopt.BundleChangeStream(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestCountOpt", func(t *testing.T) {
-	//		_, s, err := countopt.BundleCount(sess1, countopt.BundleCount(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestCountOpt", func(t *testing.T) {
-	//		_, s, err := deleteopt.BundleDelete(sess1, deleteopt.BundleDelete(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestDistinctOpt", func(t *testing.T) {
-	//		_, s, err := distinctopt.BundleDistinct(sess1, distinctopt.BundleDistinct(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestFindOpt", func(t *testing.T) {
-	//		_, s, err := findopt.BundleOne(sess1, findopt.BundleOne(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//
-	//		_, s, err = findopt.BundleFind(sess1, findopt.BundleFind(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//
-	//		_, s, err = findopt.BundleDeleteOne(sess1, findopt.BundleDeleteOne(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//
-	//		_, s, err = findopt.BundleReplaceOne(sess1, findopt.BundleReplaceOne(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//
-	//		_, s, err = findopt.BundleUpdateOne(sess1, findopt.BundleUpdateOne(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestIndexOpt", func(t *testing.T) {
-	//		_, s, err := indexopt.BundleCreate(sess1, indexopt.BundleCreate(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//
-	//		_, s, err = indexopt.BundleDrop(sess1, indexopt.BundleDrop(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//
-	//		_, s, err = indexopt.BundleList(sess1, indexopt.BundleList(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestInsertOpt", func(t *testing.T) {
-	//		_, s, err := insertopt.BundleMany(sess1, insertopt.BundleMany(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//
-	//		_, s, err = insertopt.BundleOne(sess1, insertopt.BundleOne(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestListCollOpt", func(t *testing.T) {
-	//		_, s, err := listcollectionopt.BundleListCollections(sess1, listcollectionopt.BundleListCollections(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestListDBOpt", func(t *testing.T) {
-	//		_, s, err := listdbopt.BundleListDatabases(sess1, listdbopt.BundleListDatabases(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestReplaceOpt", func(t *testing.T) {
-	//		_, s, err := replaceopt.BundleReplace(sess1, replaceopt.BundleReplace(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//
-	//	t.Run("TestUpdateOpt", func(t *testing.T) {
-	//		_, s, err := updateopt.BundleUpdate(sess1, updateopt.BundleUpdate(sess2)).Unbundle(true)
-	//		checkUnbundle(t, s, sess2, client.id, err)
-	//	})
-	//})
 }

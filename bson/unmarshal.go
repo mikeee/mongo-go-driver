@@ -1,3 +1,9 @@
+// Copyright (C) MongoDB, Inc. 2017-present.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
 package bson
 
 import (
@@ -35,8 +41,16 @@ func Unmarshal(data []byte, val interface{}) error {
 // stores the result in the value pointed to by val. If val is nil or not
 // a pointer, UnmarshalWithRegistry returns InvalidUnmarshalError.
 func UnmarshalWithRegistry(r *bsoncodec.Registry, data []byte, val interface{}) error {
-	vr := bsonrw.NewBSONValueReader(data)
-	return unmarshalFromReader(r, vr, val)
+	vr := bsonrw.NewBSONDocumentReader(data)
+	return unmarshalFromReader(bsoncodec.DecodeContext{Registry: r}, vr, val)
+}
+
+// UnmarshalWithContext parses the BSON-encoded data using DecodeContext dc and
+// stores the result in the value pointed to by val. If val is nil or not
+// a pointer, UnmarshalWithRegistry returns InvalidUnmarshalError.
+func UnmarshalWithContext(dc bsoncodec.DecodeContext, data []byte, val interface{}) error {
+	vr := bsonrw.NewBSONDocumentReader(data)
+	return unmarshalFromReader(dc, vr, val)
 }
 
 // UnmarshalExtJSON parses the extended JSON-encoded data and stores the result
@@ -50,11 +64,27 @@ func UnmarshalExtJSON(data []byte, canonical bool, val interface{}) error {
 // Registry r and stores the result in the value pointed to by val. If val is
 // nil or not a pointer, UnmarshalWithRegistry returns InvalidUnmarshalError.
 func UnmarshalExtJSONWithRegistry(r *bsoncodec.Registry, data []byte, canonical bool, val interface{}) error {
-	ejvr := bsonrw.NewExtJSONValueReader(bytes.NewReader(data), canonical)
-	return unmarshalFromReader(r, ejvr, val)
+	ejvr, err := bsonrw.NewExtJSONValueReader(bytes.NewReader(data), canonical)
+	if err != nil {
+		return err
+	}
+
+	return unmarshalFromReader(bsoncodec.DecodeContext{Registry: r}, ejvr, val)
 }
 
-func unmarshalFromReader(r *bsoncodec.Registry, vr bsonrw.ValueReader, val interface{}) error {
+// UnmarshalExtJSONWithContext parses the extended JSON-encoded data using
+// DecodeContext dc and stores the result in the value pointed to by val. If val is
+// nil or not a pointer, UnmarshalWithRegistry returns InvalidUnmarshalError.
+func UnmarshalExtJSONWithContext(dc bsoncodec.DecodeContext, data []byte, canonical bool, val interface{}) error {
+	ejvr, err := bsonrw.NewExtJSONValueReader(bytes.NewReader(data), canonical)
+	if err != nil {
+		return err
+	}
+
+	return unmarshalFromReader(dc, ejvr, val)
+}
+
+func unmarshalFromReader(dc bsoncodec.DecodeContext, vr bsonrw.ValueReader, val interface{}) error {
 	dec := decPool.Get().(*Decoder)
 	defer decPool.Put(dec)
 
@@ -62,7 +92,7 @@ func unmarshalFromReader(r *bsoncodec.Registry, vr bsonrw.ValueReader, val inter
 	if err != nil {
 		return err
 	}
-	err = dec.SetRegistry(r)
+	err = dec.SetContext(dc)
 	if err != nil {
 		return err
 	}

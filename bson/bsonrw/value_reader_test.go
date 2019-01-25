@@ -1,3 +1,9 @@
+// Copyright (C) MongoDB, Inc. 2017-present.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
 package bsonrw
 
 import (
@@ -8,10 +14,9 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/mongodb/mongo-go-driver/bson/bsoncore"
 	"github.com/mongodb/mongo-go-driver/bson/bsontype"
-	"github.com/mongodb/mongo-go-driver/bson/decimal"
-	"github.com/mongodb/mongo-go-driver/bson/objectid"
+	"github.com/mongodb/mongo-go-driver/bson/primitive"
+	"github.com/mongodb/mongo-go-driver/x/bsonx/bsoncore"
 )
 
 func TestValueReader(t *testing.T) {
@@ -208,7 +213,7 @@ func TestValueReader(t *testing.T) {
 			}
 
 			vr.stack[1].mode = mArray
-			wanterr = vr.invalidTransitionErr(mDocument)
+			wanterr = vr.invalidTransitionErr(mDocument, "ReadDocument", []mode{mTopLevel, mElement, mValue})
 			_, err = vr.ReadDocument()
 			if err == nil || err.Error() != wanterr.Error() {
 				t.Errorf("Incorrect returned error. got %v; want %v", err, wanterr)
@@ -366,7 +371,7 @@ func TestValueReader(t *testing.T) {
 			data   []byte
 			offset int64
 			ns     string
-			oid    objectid.ObjectID
+			oid    primitive.ObjectID
 			err    error
 			vType  bsontype.Type
 		}{
@@ -375,7 +380,7 @@ func TestValueReader(t *testing.T) {
 				[]byte{},
 				0,
 				"",
-				objectid.ObjectID{},
+				primitive.ObjectID{},
 				(&valueReader{stack: []vrState{{vType: bsontype.EmbeddedDocument}}, frame: 0}).typeError(bsontype.DBPointer),
 				bsontype.EmbeddedDocument,
 			},
@@ -384,7 +389,7 @@ func TestValueReader(t *testing.T) {
 				[]byte{},
 				0,
 				"",
-				objectid.ObjectID{},
+				primitive.ObjectID{},
 				io.EOF,
 				bsontype.DBPointer,
 			},
@@ -393,7 +398,7 @@ func TestValueReader(t *testing.T) {
 				[]byte{0x04, 0x00, 0x00, 0x00},
 				0,
 				"",
-				objectid.ObjectID{},
+				primitive.ObjectID{},
 				io.EOF,
 				bsontype.DBPointer,
 			},
@@ -402,7 +407,7 @@ func TestValueReader(t *testing.T) {
 				[]byte{0x04, 0x00, 0x00, 0x00, 'f', 'o', 'o', 0x00},
 				0,
 				"",
-				objectid.ObjectID{},
+				primitive.ObjectID{},
 				io.EOF,
 				bsontype.DBPointer,
 			},
@@ -414,7 +419,7 @@ func TestValueReader(t *testing.T) {
 				},
 				0,
 				"foo",
-				objectid.ObjectID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C},
+				primitive.ObjectID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C},
 				nil,
 				bsontype.DBPointer,
 			},
@@ -513,7 +518,7 @@ func TestValueReader(t *testing.T) {
 			name   string
 			data   []byte
 			offset int64
-			dc128  decimal.Decimal128
+			dc128  primitive.Decimal128
 			err    error
 			vType  bsontype.Type
 		}{
@@ -521,7 +526,7 @@ func TestValueReader(t *testing.T) {
 				"incorrect type",
 				[]byte{},
 				0,
-				decimal.Decimal128{},
+				primitive.Decimal128{},
 				(&valueReader{stack: []vrState{{vType: bsontype.EmbeddedDocument}}, frame: 0}).typeError(bsontype.Decimal128),
 				bsontype.EmbeddedDocument,
 			},
@@ -529,7 +534,7 @@ func TestValueReader(t *testing.T) {
 				"length too short",
 				[]byte{},
 				0,
-				decimal.Decimal128{},
+				primitive.Decimal128{},
 				io.EOF,
 				bsontype.Decimal128,
 			},
@@ -540,7 +545,7 @@ func TestValueReader(t *testing.T) {
 					0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // High
 				},
 				0,
-				decimal.NewDecimal128(65280, 255),
+				primitive.NewDecimal128(65280, 255),
 				nil,
 				bsontype.Decimal128,
 			},
@@ -983,7 +988,7 @@ func TestValueReader(t *testing.T) {
 			name   string
 			data   []byte
 			offset int64
-			oid    objectid.ObjectID
+			oid    primitive.ObjectID
 			err    error
 			vType  bsontype.Type
 		}{
@@ -991,7 +996,7 @@ func TestValueReader(t *testing.T) {
 				"incorrect type",
 				[]byte{},
 				0,
-				objectid.ObjectID{},
+				primitive.ObjectID{},
 				(&valueReader{stack: []vrState{{vType: bsontype.EmbeddedDocument}}, frame: 0}).typeError(bsontype.ObjectID),
 				bsontype.EmbeddedDocument,
 			},
@@ -999,7 +1004,7 @@ func TestValueReader(t *testing.T) {
 				"not enough bytes for objectID",
 				[]byte{},
 				0,
-				objectid.ObjectID{},
+				primitive.ObjectID{},
 				io.EOF,
 				bsontype.ObjectID,
 			},
@@ -1007,7 +1012,7 @@ func TestValueReader(t *testing.T) {
 				"success",
 				[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C},
 				0,
-				objectid.ObjectID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C},
+				primitive.ObjectID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C},
 				nil,
 				bsontype.ObjectID,
 			},
@@ -1423,25 +1428,77 @@ func TestValueReader(t *testing.T) {
 				})
 			})
 		}
+		t.Run("ReadValueBytes/Top Level Doc", func(t *testing.T) {
+			testCases := []struct {
+				name     string
+				want     []byte
+				wantType bsontype.Type
+				wantErr  error
+			}{
+				{
+					"success",
+					bsoncore.BuildDocument(nil, bsoncore.AppendDoubleElement(nil, "pi", 3.14159)),
+					bsontype.Type(0),
+					nil,
+				},
+				{
+					"wrong length",
+					[]byte{0x01, 0x02, 0x03},
+					bsontype.Type(0),
+					io.EOF,
+				},
+				{
+					"append bytes",
+					[]byte{0x01, 0x02, 0x03, 0x04},
+					bsontype.Type(0),
+					io.EOF,
+				},
+			}
+
+			for _, tc := range testCases {
+				tc := tc
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+					vr := &valueReader{
+						d: tc.want,
+						stack: []vrState{
+							{mode: mTopLevel},
+						},
+						frame: 0,
+					}
+					gotType, got, gotErr := vr.ReadValueBytes(nil)
+					if gotErr != tc.wantErr {
+						t.Errorf("Did not receive expected error. got %v; want %v", gotErr, tc.wantErr)
+					}
+					if tc.wantErr == nil && gotType != tc.wantType {
+						t.Errorf("Did not receive expected type. got %v; want %v", gotType, tc.wantType)
+					}
+					if tc.wantErr == nil && !bytes.Equal(got, tc.want) {
+						t.Errorf("Did not receive expected bytes. got %v; want %v", got, tc.want)
+					}
+				})
+			}
+		})
 	})
 
 	t.Run("invalid transition", func(t *testing.T) {
 		t.Run("Skip", func(t *testing.T) {
 			vr := &valueReader{stack: []vrState{{mode: mTopLevel}}}
-			wanterr := (&valueReader{stack: []vrState{{mode: mTopLevel}}}).invalidTransitionErr(0)
+			wanterr := (&valueReader{stack: []vrState{{mode: mTopLevel}}}).invalidTransitionErr(0, "Skip", []mode{mElement, mValue})
 			goterr := vr.Skip()
 			if !cmp.Equal(goterr, wanterr, cmp.Comparer(compareErrors)) {
 				t.Errorf("Expected correct invalid transition error. got %v; want %v", goterr, wanterr)
 			}
 		})
-		t.Run("ReadBytes", func(t *testing.T) {
-			vr := &valueReader{stack: []vrState{{mode: mTopLevel}}}
-			wanterr := (&valueReader{stack: []vrState{{mode: mTopLevel}}}).invalidTransitionErr(0)
-			_, _, goterr := vr.ReadValueBytes(nil)
-			if !cmp.Equal(goterr, wanterr, cmp.Comparer(compareErrors)) {
-				t.Errorf("Expected correct invalid transition error. got %v; want %v", goterr, wanterr)
-			}
-		})
+	})
+	t.Run("ReadBytes", func(t *testing.T) {
+		vr := &valueReader{stack: []vrState{{mode: mTopLevel}, {mode: mDocument}}, frame: 1}
+		wanterr := (&valueReader{stack: []vrState{{mode: mTopLevel}, {mode: mDocument}}, frame: 1}).
+			invalidTransitionErr(0, "ReadValueBytes", []mode{mElement, mValue})
+		_, _, goterr := vr.ReadValueBytes(nil)
+		if !cmp.Equal(goterr, wanterr, cmp.Comparer(compareErrors)) {
+			t.Errorf("Expected correct invalid transition error. got %v; want %v", goterr, wanterr)
+		}
 	})
 }
 

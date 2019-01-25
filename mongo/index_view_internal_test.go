@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mongodb/mongo-go-driver/bson"
-	"github.com/mongodb/mongo-go-driver/mongo/indexopt"
+	"github.com/mongodb/mongo-go-driver/mongo/options"
+	"github.com/mongodb/mongo-go-driver/x/bsonx"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,12 +41,10 @@ func getIndexableCollection(t *testing.T) (string, *Collection) {
 
 	dbName := hex.EncodeToString(randomBytes)
 
-	_, err = db.RunCommand(
+	err = db.RunCommand(
 		context.Background(),
-		bson.NewDocument(
-			bson.EC.String("create", dbName),
-		),
-	)
+		bsonx.Doc{{"create", bsonx.String(dbName)}},
+	).Err()
 	require.NoError(t, err)
 
 	return dbName, db.Collection(dbName)
@@ -99,9 +97,7 @@ func TestIndexView_CreateOne(t *testing.T) {
 	indexName, err := indexView.CreateOne(
 		context.Background(),
 		IndexModel{
-			Keys: bson.NewDocument(
-				bson.EC.Int32("foo", -1),
-			),
+			Keys: bsonx.Doc{{"foo", bsonx.Int32(-1)}},
 		},
 	)
 	require.NoError(t, err)
@@ -142,10 +138,8 @@ func TestIndexView_CreateOneWithNameOption(t *testing.T) {
 	indexName, err := indexView.CreateOne(
 		context.Background(),
 		IndexModel{
-			Keys: bson.NewDocument(
-				bson.EC.Int32("foo", -1),
-			),
-			Options: NewIndexOptionsBuilder().Name("testname").Build(),
+			Keys:    bsonx.Doc{{"foo", bsonx.Int32(-1)}},
+			Options: options.Index().SetName("testname"),
 		},
 	)
 	require.NoError(t, err)
@@ -187,38 +181,36 @@ func TestIndexView_CreateOneWithAllOptions(t *testing.T) {
 	_, err := indexView.CreateOne(
 		context.Background(),
 		IndexModel{
-			Keys: bson.NewDocument(
-				bson.EC.String("foo", "text"),
-			),
-			Options: NewIndexOptionsBuilder().
-				Background(false).
-				ExpireAfterSeconds(10).
-				Name("a").
-				Sparse(false).
-				Unique(false).
-				Version(1).
-				DefaultLanguage("english").
-				LanguageOverride("english").
-				TextVersion(1).
-				Weights(bson.NewDocument()).
-				SphereVersion(1).
-				Bits(32).
-				Max(10).
-				Min(1).
-				BucketSize(1).
-				PartialFilterExpression(bson.NewDocument()).
-				StorageEngine(bson.NewDocument(
-					bson.EC.SubDocument("wiredTiger", bson.NewDocument(
-						bson.EC.String("configString", "block_compressor=zlib"),
-					)),
-				)).
-				Build(),
+			Keys: bsonx.Doc{{"foo", bsonx.String("text")}},
+			Options: options.Index().
+				SetBackground(false).
+				SetExpireAfterSeconds(10).
+				SetName("a").
+				SetSparse(false).
+				SetUnique(false).
+				SetVersion(1).
+				SetDefaultLanguage("english").
+				SetLanguageOverride("english").
+				SetTextVersion(1).
+				SetWeights(bsonx.Doc{}).
+				SetSphereVersion(1).
+				SetBits(2).
+				SetMax(10).
+				SetMin(1).
+				SetBucketSize(1).
+				SetPartialFilterExpression(bsonx.Doc{}).
+				SetStorageEngine(bsonx.Doc{
+					{"wiredTiger", bsonx.Document(bsonx.Doc{
+						{"configString", bsonx.String("block_compressor=zlib")},
+					})},
+				}),
 		},
 	)
 	require.NoError(t, err)
 }
 
 func TestIndexView_CreateOneWithCollationOption(t *testing.T) {
+	skipIfBelow34(t, createTestDatabase(t, nil)) // collation invalid for server versions < 3.4
 	t.Parallel()
 
 	if testing.Short() {
@@ -231,14 +223,10 @@ func TestIndexView_CreateOneWithCollationOption(t *testing.T) {
 	_, err := indexView.CreateOne(
 		context.Background(),
 		IndexModel{
-			Keys: bson.NewDocument(
-				bson.EC.String("bar", "text"),
-			),
-			Options: NewIndexOptionsBuilder().
-				Collation(bson.NewDocument(
-					bson.EC.String("locale", "simple"),
-				)).
-				Build(),
+			Keys: bsonx.Doc{{"bar", bsonx.String("text")}},
+			Options: options.Index().SetCollation(&options.Collation{
+				Locale: "simple",
+			}),
 		},
 	)
 	require.NoError(t, err)
@@ -278,15 +266,13 @@ func TestIndexView_CreateMany(t *testing.T) {
 		context.Background(),
 		[]IndexModel{
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("foo", -1),
-				),
+				Keys: bsonx.Doc{{"foo", bsonx.Int32(-1)}},
 			},
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("bar", 1),
-					bson.EC.Int32("baz", -1),
-				),
+				Keys: bsonx.Doc{
+					{"bar", bsonx.Int32(1)},
+					{"baz", bsonx.Int32(-1)},
+				},
 			},
 		},
 	)
@@ -343,15 +329,13 @@ func TestIndexView_DropOne(t *testing.T) {
 		context.Background(),
 		[]IndexModel{
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("foo", -1),
-				),
+				Keys: bsonx.Doc{{"foo", bsonx.Int32(-1)}},
 			},
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("bar", 1),
-					bson.EC.Int32("baz", -1),
-				),
+				Keys: bsonx.Doc{
+					{"bar", bsonx.Int32(1)},
+					{"baz", bsonx.Int32(-1)},
+				},
 			},
 		},
 	)
@@ -395,15 +379,13 @@ func TestIndexView_DropAll(t *testing.T) {
 		context.Background(),
 		[]IndexModel{
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("foo", -1),
-				),
+				Keys: bsonx.Doc{{"foo", bsonx.Int32(-1)}},
 			},
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("bar", 1),
-					bson.EC.Int32("baz", -1),
-				),
+				Keys: bsonx.Doc{
+					{"bar", bsonx.Int32(1)},
+					{"baz", bsonx.Int32(-1)},
+				},
 			},
 		},
 	)
@@ -443,26 +425,21 @@ func TestIndexView_CreateIndexesOptioner(t *testing.T) {
 	expectedNS := fmt.Sprintf("%s.%s", t.Name(), dbName)
 	indexView := coll.Indexes()
 
-	var opts []indexopt.Create
-	optMax := indexopt.MaxTime(1000)
-	opts = append(opts, optMax)
-
+	opts := options.CreateIndexes().SetMaxTime(1000)
 	indexNames, err := indexView.CreateMany(
 		context.Background(),
 		[]IndexModel{
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("foo", -1),
-				),
+				Keys: bsonx.Doc{{"foo", bsonx.Int32(-1)}},
 			},
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("bar", 1),
-					bson.EC.Int32("baz", -1),
-				),
+				Keys: bsonx.Doc{
+					{"bar", bsonx.Int32(1)},
+					{"baz", bsonx.Int32(-1)},
+				},
 			},
 		},
-		opts...,
+		opts,
 	)
 	require.NoError(t, err)
 	require.NoError(t, err)
@@ -518,23 +495,18 @@ func TestIndexView_DropIndexesOptioner(t *testing.T) {
 	expectedNS := fmt.Sprintf("%s.%s", t.Name(), dbName)
 	indexView := coll.Indexes()
 
-	var opts []indexopt.Drop
-	optMax := indexopt.MaxTime(1000)
-	opts = append(opts, optMax)
-
+	opts := options.DropIndexes().SetMaxTime(1000)
 	indexNames, err := indexView.CreateMany(
 		context.Background(),
 		[]IndexModel{
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("foo", -1),
-				),
+				Keys: bsonx.Doc{{"foo", bsonx.Int32(-1)}},
 			},
 			{
-				Keys: bson.NewDocument(
-					bson.EC.Int32("bar", 1),
-					bson.EC.Int32("baz", -1),
-				),
+				Keys: bsonx.Doc{
+					{"bar", bsonx.Int32(1)},
+					{"baz", bsonx.Int32(-1)},
+				},
 			},
 		},
 	)
@@ -544,7 +516,7 @@ func TestIndexView_DropIndexesOptioner(t *testing.T) {
 
 	_, err = indexView.DropAll(
 		context.Background(),
-		opts...,
+		opts,
 	)
 	require.NoError(t, err)
 

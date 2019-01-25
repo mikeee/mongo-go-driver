@@ -1,3 +1,9 @@
+// Copyright (C) MongoDB, Inc. 2017-present.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
 package gridfs
 
 import (
@@ -30,6 +36,7 @@ type DownloadStream struct {
 	closed        bool
 	buffer        []byte // store up to 1 chunk if the user provided buffer isn't big enough
 	bufferStart   int
+	bufferEnd     int
 	expectedChunk int32 // index of next expected chunk
 	readDeadline  time.Time
 	fileLen       int64
@@ -87,21 +94,21 @@ func (ds *DownloadStream) Read(p []byte) (int, error) {
 	var err error
 
 	for bytesCopied < len(p) {
-		if ds.bufferStart == 0 {
-			// buffer empty
+		if ds.bufferStart >= ds.bufferEnd {
+			// Buffer is empty and can load in data from new chunk.
 			err = ds.fillBuffer(ctx)
 			if err != nil {
 				if err == errNoMoreChunks {
 					return bytesCopied, nil
 				}
-
 				return bytesCopied, err
 			}
 		}
 
-		copied := copy(p, ds.buffer[ds.bufferStart:])
+		copied := copy(p[bytesCopied:], ds.buffer[ds.bufferStart:ds.bufferEnd])
+
 		bytesCopied += copied
-		ds.bufferStart = (ds.bufferStart + copied) % int(ds.chunkSize)
+		ds.bufferStart += copied
 	}
 
 	return len(p), nil
@@ -165,22 +172,23 @@ func (ds *DownloadStream) fillBuffer(ctx context.Context) error {
 		return err
 	}
 
-	chunkIndex, err := nextChunk.Lookup("n")
+	chunkIndex, err := nextChunk.LookupErr("n")
 	if err != nil {
 		return err
 	}
 
-	if chunkIndex.Value().Int32() != ds.expectedChunk {
+	if chunkIndex.Int32() != ds.expectedChunk {
 		return ErrWrongIndex
 	}
 
 	ds.expectedChunk++
-	data, err := nextChunk.Lookup("data")
+	data, err := nextChunk.LookupErr("data")
 	if err != nil {
 		return err
 	}
 
-	_, dataBytes := data.Value().Binary()
+	_, dataBytes := data.Binary()
+	copied := copy(ds.buffer, dataBytes)
 
 	bytesLen := int32(len(dataBytes))
 	if ds.expectedChunk == ds.numChunks {
@@ -196,7 +204,8 @@ func (ds *DownloadStream) fillBuffer(ctx context.Context) error {
 		return ErrWrongSize
 	}
 
-	copy(ds.buffer, dataBytes)
 	ds.bufferStart = 0
+	ds.bufferEnd = copied
+
 	return nil
 }

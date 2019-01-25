@@ -1,3 +1,9 @@
+// Copyright (C) MongoDB, Inc. 2017-present.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
 package bson
 
 import (
@@ -20,7 +26,7 @@ func TestBasicEncode(t *testing.T) {
 			reg := DefaultRegistry
 			encoder, err := reg.LookupEncoder(reflect.TypeOf(tc.val))
 			noerr(t, err)
-			err = encoder.EncodeValue(bsoncodec.EncodeContext{Registry: reg}, vw, tc.val)
+			err = encoder.EncodeValue(bsoncodec.EncodeContext{Registry: reg}, vw, reflect.ValueOf(tc.val))
 			noerr(t, err)
 
 			if !bytes.Equal(got, tc.want) {
@@ -37,8 +43,7 @@ func TestEncoderEncode(t *testing.T) {
 			got := make(bsonrw.SliceWriter, 0, 1024)
 			vw, err := bsonrw.NewBSONValueWriter(&got)
 			noerr(t, err)
-			reg := DefaultRegistry
-			enc, err := NewEncoder(reg, vw)
+			enc, err := NewEncoder(vw)
 			noerr(t, err)
 			err = enc.Encode(tc.val)
 			noerr(t, err)
@@ -96,8 +101,7 @@ func TestEncoderEncode(t *testing.T) {
 					vw, err = bsonrw.NewBSONValueWriter(&b)
 					noerr(t, err)
 				}
-
-				enc, err := NewEncoder(DefaultRegistry, vw)
+				enc, err := NewEncoder(vw)
 				noerr(t, err)
 				got := enc.Encode(marshaler)
 				want := tc.wanterr
@@ -121,3 +125,25 @@ type testMarshaler struct {
 }
 
 func (tm testMarshaler) MarshalBSON() ([]byte, error) { return tm.buf, tm.err }
+
+func docToBytes(d interface{}) []byte {
+	b, err := Marshal(d)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+type byteMarshaler []byte
+
+func (bm byteMarshaler) MarshalBSON() ([]byte, error) { return bm, nil }
+
+type _Interface interface {
+	method()
+}
+
+type _impl struct {
+	Foo string
+}
+
+func (_impl) method() {}

@@ -1,3 +1,9 @@
+// Copyright (C) MongoDB, Inc. 2017-present.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
 package bson
 
 import (
@@ -24,7 +30,7 @@ var unmarshalingTestCases = []unmarshalingTestCase{
 		&struct {
 			Foo bool
 		}{Foo: true},
-		docToBytes(NewDocument(EC.Boolean("foo", true))),
+		docToBytes(D{{"foo", true}}),
 	},
 	{
 		"nested document",
@@ -43,7 +49,7 @@ var unmarshalingTestCases = []unmarshalingTestCase{
 				Bar bool
 			}{Bar: true},
 		},
-		docToBytes(NewDocument(EC.SubDocumentFromElements("foo", EC.Boolean("bar", true)))),
+		docToBytes(D{{"foo", D{{"bar", true}}}}),
 	},
 	{
 		"simple array",
@@ -56,6 +62,6 @@ var unmarshalingTestCases = []unmarshalingTestCase{
 		}{
 			Foo: []bool{true},
 		},
-		docToBytes(NewDocument(EC.ArrayFromElements("foo", VC.Boolean(true)))),
+		docToBytes(D{{"foo", A{true}}}),
 	},
 }
